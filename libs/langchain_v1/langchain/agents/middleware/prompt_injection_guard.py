@@ -12,7 +12,6 @@ from langchain.agents.middleware.types import (
     AgentState,
     ContextT,
     ResponseT,
-    hook_config,
 )
 
 if TYPE_CHECKING:
@@ -37,7 +36,6 @@ class PromptInjectionGuardMiddleware(
         ]
         return [pattern for pattern in patterns if re.search(pattern, text, re.IGNORECASE)]
 
-    @hook_config(can_jump_to=["end"])
     @override
     def before_model(
         self,
@@ -45,19 +43,27 @@ class PromptInjectionGuardMiddleware(
         runtime: Runtime[ContextT],
     ) -> dict[str, Any] | None:
         messages = state.get("messages", [])
+        all_matches: set[str] = set()
+
         for msg in messages:
             content = getattr(msg, "content", "")
             if not isinstance(content, str):
                 continue
 
             matches = self._detect_prompt_injection(content)
-            if matches:
-                if self.strategy == "block":
-                    raise ValueError(
-                        "Prompt injection detected in input messages. "
-                        f"Matched patterns: {matches}"
-                    )
-                if self.strategy == "annotate":
-                    return {"prompt_injection_detected": True}
+            all_matches.update(matches)
+
+        detected_patterns = sorted(all_matches)
+        if detected_patterns:
+            if self.strategy == "block":
+                raise ValueError(
+                    "Prompt injection detected in input messages. "
+                    f"Detected patterns: {detected_patterns}"
+                )
+            if self.strategy == "annotate":
+                return {
+                    "prompt_injection_detected": True,
+                    "detected_patterns": detected_patterns,
+                }
 
         return None
