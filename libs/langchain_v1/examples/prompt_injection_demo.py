@@ -62,7 +62,10 @@ def main() -> None:
             }
         )
         print("[ALLOWED] Normal response:")
-        print(result)
+        if isinstance(result, dict) and "messages" in result:
+            print(result["messages"][-1].content)
+        else:
+            print(result)
     except ValueError as error:
         print(f"Error message: {error}")
 
@@ -83,10 +86,13 @@ def main() -> None:
                 ]
             }
         )
-        print("[ALLOWED]")
-        print(result)
+        print("[ALLOWED] Normal response:")
+        if isinstance(result, dict) and "messages" in result:
+            print(result["messages"][-1].content)
+        else:
+            print(result)
     except ValueError as error:
-        print("[BLOCKED]")
+        print("[BLOCKED] Prompt injection detected successfully")
         print(f"Error message: {error}")
 
     print("=== Test Case 4: PDF Input ===")
@@ -106,10 +112,13 @@ def main() -> None:
                 ]
             }
         )
-        print("[ALLOWED]")
-        print(result)
+        print("[ALLOWED] Normal response:")
+        if isinstance(result, dict) and "messages" in result:
+            print(result["messages"][-1].content)
+        else:
+            print(result)
     except ValueError as error:
-        print("[BLOCKED]")
+        print("[BLOCKED] Prompt injection detected successfully")
         print(f"Error message: {error}")
 
 
