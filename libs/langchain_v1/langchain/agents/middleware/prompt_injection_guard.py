@@ -24,9 +24,15 @@ class PromptInjectionGuardMiddleware(
 ):
     """Middleware for detecting prompt injection attacks before model execution."""
 
-    def __init__(self, *, strategy: str = "block") -> None:
+    def __init__(
+        self,
+        *,
+        strategy: str = "block",
+        use_intent_agent: bool = True,
+    ) -> None:
         super().__init__()
         self.strategy = strategy
+        self.use_intent_agent = use_intent_agent
         self.intent_agent = IntentAgent()
 
     def _detect_prompt_injection(self, text: str) -> list[str]:
@@ -72,7 +78,7 @@ class PromptInjectionGuardMiddleware(
                 }
 
         semantic_detected = False
-        if not detected_patterns:
+        if not detected_patterns and self.use_intent_agent:
             for content in contents:
                 result = self.intent_agent.analyze(content)
                 is_attack = result.get("is_attack") is True

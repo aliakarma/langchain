@@ -4,10 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytesseract
-from PIL import Image
-from PyPDF2 import PdfReader
-
 
 class MultiModalInputProcessor:
     """Convert text, image, and PDF inputs into plain text.
@@ -37,6 +33,13 @@ class MultiModalInputProcessor:
             Extracted text from the image. Returns an empty string if no text
             is found.
         """
+        try:
+            import pytesseract
+            from PIL import Image
+        except ModuleNotFoundError as error:
+            msg = "Image processing dependencies are not installed"
+            raise ValueError(msg) from error
+
         with Image.open(image_path) as image:
             extracted = pytesseract.image_to_string(image)
         return extracted.strip() if extracted else ""
@@ -51,6 +54,12 @@ class MultiModalInputProcessor:
             Combined extracted text from all pages. Returns an empty string if
             no text is found.
         """
+        try:
+            from PyPDF2 import PdfReader
+        except ModuleNotFoundError as error:
+            msg = "PDF processing dependencies are not installed"
+            raise ValueError(msg) from error
+
         reader = PdfReader(pdf_path)
         parts = [(page.extract_text() or "") for page in reader.pages]
         return "\n".join(parts).strip()

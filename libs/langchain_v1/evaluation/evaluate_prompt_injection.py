@@ -1,0 +1,101 @@
+"""Evaluation script for prompt injection detection."""
+
+import json
+from typing import Any, cast
+
+from langchain.agents.middleware.prompt_injection_guard import PromptInjectionGuardMiddleware
+from langchain.agents.preprocessing.multimodal_input_processor import MultiModalInputProcessor
+
+DATASET_PATH = "libs/langchain_v1/evaluation/prompt_injection_dataset.json"
+
+
+class _Message:
+    """Minimal message container with a content attribute."""
+
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+
+def _safe_divide(numerator: float, denominator: float) -> float:
+    if denominator == 0:
+        return 0.0
+    return numerator / denominator
+
+
+def _run_experiment(
+    dataset: list[dict[str, str]],
+    *,
+    title: str,
+    use_intent_agent: bool,
+) -> None:
+    middleware = PromptInjectionGuardMiddleware(
+        strategy="block",
+        use_intent_agent=use_intent_agent,
+    )
+    processor = MultiModalInputProcessor()
+
+    tp = 0
+    tn = 0
+    fp = 0
+    fn = 0
+
+    for sample in dataset:
+        text = sample["text"]
+        label = sample["label"]
+
+        processed_text = processor.process(
+            {
+                "type": "text",
+                "data": text,
+            }
+        )
+
+        try:
+            middleware.before_model(
+                cast(Any, {"messages": [_Message(processed_text)]}),
+                runtime=cast(Any, None),
+            )
+            prediction = "benign"
+        except ValueError:
+            prediction = "attack"
+
+        if label == "attack" and prediction == "attack":
+            tp += 1
+        elif label == "benign" and prediction == "benign":
+            tn += 1
+        elif label == "benign" and prediction == "attack":
+            fp += 1
+        elif label == "attack" and prediction == "benign":
+            fn += 1
+
+    precision = _safe_divide(tp, tp + fp)
+    recall = _safe_divide(tp, tp + fn)
+    f1_score = _safe_divide(2 * (precision * recall), precision + recall)
+
+    print(title)
+    print("-------------------")
+    print(f"TP: {tp}, TN: {tn}, FP: {fp}, FN: {fn}")
+    print(f"Precision: {precision:.2f}")
+    print(f"Recall: {recall:.2f}")
+    print(f"F1 Score: {f1_score:.2f}")
+    print()
+
+
+def main() -> None:
+    with open(DATASET_PATH, encoding="utf-8") as file:
+        dataset = json.load(file)
+
+    _run_experiment(
+        dataset,
+        title="Evaluation Results (Regex Only)",
+        use_intent_agent=False,
+    )
+    _run_experiment(
+        dataset,
+        title="Evaluation Results (Hybrid)",
+        use_intent_agent=True,
+    )
+
+
+if __name__ == "__main__":
+    main()
