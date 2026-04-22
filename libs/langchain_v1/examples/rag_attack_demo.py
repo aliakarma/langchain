@@ -21,6 +21,7 @@ def main() -> None:
     middleware = PromptInjectionGuardMiddleware(strategy="block")
     processor = MultiModalInputProcessor()
 
+    attack_detected = False
     for doc in retrieved_docs:
         try:
             middleware.before_model(
@@ -28,8 +29,7 @@ def main() -> None:
                 runtime=None,
             )
         except ValueError:
-            print("[BLOCKED] Malicious document detected in retrieval phase")
-            return
+            attack_detected = True
 
     context = "\n".join(retrieved_docs)
 
@@ -50,21 +50,23 @@ def main() -> None:
     print(result.content if hasattr(result, "content") else result)
 
     print("\n=== Scenario 2: WITH AgentGuard Protection ===")
+    if attack_detected:
+        print("[BLOCKED] Malicious document detected in retrieval phase")
+    else:
+        try:
+            middleware.before_model(
+                {"messages": [HumanMessage(content=processed_text)]},
+                runtime=None,
+            )
 
-    try:
-        middleware.before_model(
-            {"messages": [HumanMessage(content=processed_text)]},
-            runtime=None,
-        )
+            result = model.invoke(processed_text)
 
-        result = model.invoke(processed_text)
+            print("[ALLOWED] Response:")
+            print(result.content if hasattr(result, "content") else result)
 
-        print("[ALLOWED] Response:")
-        print(result.content if hasattr(result, "content") else result)
-
-    except ValueError as error:
-        print("[BLOCKED] RAG attack detected")
-        print(f"Error: {error}")
+        except ValueError as error:
+            print("[BLOCKED] RAG attack detected")
+            print(f"Error: {error}")
 
 
 if __name__ == "__main__":
