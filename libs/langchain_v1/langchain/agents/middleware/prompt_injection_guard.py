@@ -136,7 +136,7 @@ class PromptInjectionGuardMiddleware(
                     except (TypeError, ValueError):
                         confidence_value = 0.0
 
-                    if is_attack and confidence_value >= 0.7:
+                    if is_attack and confidence_value >= 0.6:
                         if self.strategy == "block":
                             raise ValueError(
                                 "Prompt injection detected in input messages. "

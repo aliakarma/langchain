@@ -1,19 +1,12 @@
 """Evaluation script for prompt injection detection."""
 
 import json
-from typing import Any, cast
 
 from langchain.agents.middleware.prompt_injection_guard import PromptInjectionGuardMiddleware
 from langchain.agents.preprocessing.multimodal_input_processor import MultiModalInputProcessor
+from langchain_core.messages import HumanMessage
 
 DATASET_PATH = "libs/langchain_v1/evaluation/prompt_injection_dataset.json"
-
-
-class _Message:
-    """Minimal message container with a content attribute."""
-
-    def __init__(self, content: str) -> None:
-        self.content = content
 
 
 def _safe_divide(numerator: float, denominator: float) -> float:
@@ -22,15 +15,10 @@ def _safe_divide(numerator: float, denominator: float) -> float:
     return numerator / denominator
 
 
-def _run_experiment(
-    dataset: list[dict[str, str]],
-    *,
-    title: str,
-    use_intent_agent: bool,
-) -> None:
+def _run_experiment(dataset: list[dict[str, str]], *, title: str) -> None:
     middleware = PromptInjectionGuardMiddleware(
         strategy="block",
-        use_intent_agent=use_intent_agent,
+        use_intent_agent=True,
     )
     processor = MultiModalInputProcessor()
 
@@ -52,8 +40,8 @@ def _run_experiment(
 
         try:
             middleware.before_model(
-                cast(Any, {"messages": [_Message(processed_text)]}),
-                runtime=cast(Any, None),
+                {"messages": [HumanMessage(content=processed_text)]},
+                runtime=None,
             )
             prediction = "benign"
         except ValueError:
@@ -87,13 +75,7 @@ def main() -> None:
 
     _run_experiment(
         dataset,
-        title="Evaluation Results (Regex Only)",
-        use_intent_agent=False,
-    )
-    _run_experiment(
-        dataset,
-        title="Evaluation Results (Hybrid)",
-        use_intent_agent=True,
+        title="Evaluation Results (Full AgentGuard)",
     )
 
 
