@@ -37,10 +37,12 @@ class PromptInjectionGuardMiddleware(
 
     def _detect_prompt_injection(self, text: str) -> list[str]:
         patterns = [
-            r"ignore (all|previous|prior) instructions",
-            r"reveal (the )?(system prompt|hidden prompt)",
-            r"disregard (the )?system prompt",
-            r"you are now in developer mode",
+            r"ignore.*instructions",
+            r"(reveal|show|display).*(system prompt|hidden prompt)",
+            r"disregard.*instructions",
+            r"developer mode",
+            r"bypass.*safety",
+            r"override.*rules",
         ]
         return [pattern for pattern in patterns if re.search(pattern, text, re.IGNORECASE)]
 
@@ -77,32 +79,73 @@ class PromptInjectionGuardMiddleware(
                     "detected_patterns": detected_patterns,
                 }
 
-        semantic_detected = False
-        if not detected_patterns and self.use_intent_agent:
-            for content in contents:
-                result = self.intent_agent.analyze(content)
-                is_attack = result.get("is_attack") is True
-                confidence = result.get("confidence", 0.0)
+        for content in contents:
+            segments = re.split(r"[.!?]\s+", content)
+            for segment in segments:
+                segment = segment.strip()
+                if not segment:
+                    continue
 
-                try:
-                    confidence_value = float(confidence)
-                except (TypeError, ValueError):
-                    confidence_value = 0.0
+                keyword_groups = [
+                    ["ignore", "instructions"],
+                    ["reveal", "system", "prompt"],
+                    ["show", "system", "prompt"],
+                    ["hidden", "prompt"],
+                    ["developer", "mode"],
+                ]
+                lower_segment = segment.lower()
+                matched_groups = [
+                    group
+                    for group in keyword_groups
+                    if all(word in lower_segment for word in group)
+                ]
+                if matched_groups:
+                    matched_keywords = [" ".join(group) for group in matched_groups]
+                    if self.strategy == "block":
+                        raise ValueError(
+                            "Prompt injection detected in input messages. "
+                            f"Detected patterns: {matched_keywords}"
+                        )
+                    if self.strategy == "annotate":
+                        return {
+                            "prompt_injection_detected": True,
+                            "detected_patterns": matched_keywords,
+                        }
 
-                if is_attack and confidence_value >= 0.7:
-                    semantic_detected = True
-                    break
+                segment_matches = self._detect_prompt_injection(segment)
+                if segment_matches:
+                    all_matches.update(segment_matches)
+                    if self.strategy == "block":
+                        raise ValueError(
+                            "Prompt injection detected in input messages. "
+                            f"Detected patterns: {sorted(all_matches)}"
+                        )
+                    if self.strategy == "annotate":
+                        return {
+                            "prompt_injection_detected": True,
+                            "detected_patterns": sorted(all_matches),
+                        }
 
-        if semantic_detected:
-            if self.strategy == "block":
-                raise ValueError(
-                    "Prompt injection detected in input messages. "
-                    "semantic detection triggered"
-                )
-            if self.strategy == "annotate":
-                return {
-                    "prompt_injection_detected": True,
-                    "detected_patterns": ["semantic detection triggered"],
-                }
+                if self.use_intent_agent:
+                    result = self.intent_agent.analyze(segment)
+                    is_attack = result.get("is_attack") is True
+                    confidence = result.get("confidence", 0.0)
+
+                    try:
+                        confidence_value = float(confidence)
+                    except (TypeError, ValueError):
+                        confidence_value = 0.0
+
+                    if is_attack and confidence_value >= 0.7:
+                        if self.strategy == "block":
+                            raise ValueError(
+                                "Prompt injection detected in input messages. "
+                                "semantic detection triggered"
+                            )
+                        if self.strategy == "annotate":
+                            return {
+                                "prompt_injection_detected": True,
+                                "detected_patterns": ["semantic detection triggered"],
+                            }
 
         return None
